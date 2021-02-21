@@ -11,7 +11,7 @@
 -- @field Code the code for this input. A code may not be necessary depending on
 -- the input type. Should be an Enum.KeyCode, ControlScheme,
 -- Enum.UserInputType, DirectionMethod, or nil.
--- @field Offset the amount to displace this Input's value by before being 
+-- @field Offset the amount to displace this Input's value by before being
 -- used. Should be a UDim, UDim2, or nil.
 -- @field Devices the array of devices this Input should trigger for. Should be
 -- an array of Enum.UserInputType.
@@ -40,12 +40,10 @@ Input.__index = Input
 -- @return the new Input
 function Input.new(type, code, offset, devices)
 	local self = setmetatable({}, Input)
-	if type(type) == "number" then
-		self.Type = type
-		self.Code = code
-		self.Offset = offset
-		self.Devices = devices
-	end
+	self.Type = type
+	self.Code = code
+	self.Offset = offset
+	self.Devices = devices
 	return self
 end
 

@@ -57,23 +57,31 @@ end
 -- @return the transformed value. A floating point number.
 -- @return the scaling factor. Always 1, all scaling is even.
 function AxisMonitor:transformValue(input, value)
-	local type = input.Type
+	local inputType = input.Type
 	local offset = (input.Offset or 0)
-	if type == InputType.None or type == InputType.Keyboard or type == InputType.MouseButton or type == InputType.GamepadButton then
+	if inputType == InputType.None or inputType == InputType.Keyboard or inputType == InputType.MouseButton or inputType == InputType.GamepadButton then
 		return ((value and 1) or 0) + offset, 1
-	elseif type == InputType.MouseMovement or type == InputType.GamepadDirection then
+	elseif inputType == InputType.MouseMovement or inputType == InputType.GamepadDirection then
 		if input.Code == Enum.KeyCode.ButtonL2 or input.Code == Enum.KeyCode.ButtonR2 then
 			return value.Z + offset, 1
 		else
 			return value.Y + offset, 1
 		end
-	elseif type == InputType.Scheme then
-		local schemeValue = 0
-		for id, enum in pairs(Direction) do
-			local monitor = input.Code[id]
-			schemeValue = schemeValue + ((monitor:Update() and directional_value[enum]) or 0)
+	elseif inputType == InputType.Scheme then
+		local valueType = type(value)
+		if valueType == "boolean" then
+			value = value and 1 or 0
+		elseif valueType == "userdata" then
+			local robloxType = typeof(valueType)
+			if robloxType == "Vector2" or robloxType == "Vector3" then
+				value = value.X
+			else
+				Console.error("AxisMonitor encountered an unresolvable " .. robloxType .. " userdata type from scheme Input")
+			end
+		elseif valueType ~= "number" then
+			Console.error("AxisMonitor encountered an unresolvable " .. valueType .. " type from scheme Input")
 		end
-		return schemeValue + offset, 1
+		return value + offset, 1
 	end
 	return 0, 1
 end
@@ -101,31 +109,26 @@ end
 --- Gets the default value of 0 for a AxisMonitor.
 --
 -- @return the default value. Always 0.
-function AxisMonitor:nullValue()
+function AxisMonitor:defaultValue()
 	return 0
 end
 
 --- Creates a Monitor for any entries with binary schemes.
 --
 -- @param entry the entry to process
-function AxisMonitor:processEntry(entry)
-	if entry.Type == InputType.Scheme then
-		local scheme = entry.Code
-		entry.Code = {}
-		for id, _ in pairs(Direction) do
-			if scheme.ControlSet[id] ~= nil then
-				local monitor = BinaryMonitor.new()
-				monitor:Bind(scheme.ControlSet[id])
-				entry.Code[id] = monitor
-			end
-		end
-	end
-end
-
---- Does no cleaning.
--- AxisMonitor keeps no special state, so no special cleaning is needed.
-function AxisMonitor:clean()
-end
+-- function AxisMonitor:processEntry(entry)
+-- 	if entry.Type == InputType.Scheme then
+-- 		local scheme = entry.Code
+-- 		entry.Code = {}
+-- 		for id, _ in pairs(Direction) do
+-- 			if scheme.ControlSet[id] ~= nil then
+-- 				local monitor = BinaryMonitor.new()
+-- 				monitor:Bind(scheme.ControlSet[id])
+-- 				entry.Code[id] = monitor
+-- 			end
+-- 		end
+-- 	end
+-- end
 
 -- End --
 Console.log("Done.")

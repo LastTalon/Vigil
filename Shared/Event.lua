@@ -69,7 +69,7 @@ end
 -- @param ... parameters to pass to all listeners
 function Event:Fire(...)
 	for _, fn in ipairs(self.listeners) do
-		fn(...)
+		coroutine.resume(coroutine.create(fn), ...)
 	end
 end
 

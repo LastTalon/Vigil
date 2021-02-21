@@ -4,7 +4,7 @@
 -- corresponding events. Recieves input based on provided ControlSchemes.
 --
 -- @author LastTalon
--- @version 0.1.1, 2020-10-01
+-- @version 0.1.1, 2020-11-14
 -- @since 0.1
 --
 -- @module ControlModule
@@ -14,17 +14,10 @@ local Console = require(game:GetService("ReplicatedStorage"):WaitForChild("Scrip
 -- Dependencies --
 Console.log("Loading dependencies...")
 
-local RunService = game:GetService("RunService")
 local Player = game:GetService("Players").LocalPlayer
 local SharedScripts = game:GetService("ReplicatedStorage"):WaitForChild("Scripts")
 
-local SpawnMonitor = require(script:WaitForChild("Monitor"):WaitForChild("Spawn"))
 local Event = require(SharedScripts:WaitForChild("Event"))
-
--- Constants --
-Console.log("Initializing constants...")
-
-local RenderStepName = "Controls"
 
 -- Functions --
 Console.log("Constructing functions...")
@@ -63,9 +56,7 @@ ControlModule.__index = ControlModule
 function ControlModule.new()
 	if instance == nil then
 		local self = setmetatable({}, ControlModule)
-		self.controlsBound = false
-		self.monitors = {}
-		-- self.listeners = {}
+		self.bindings = {}
 		self.event = Event.new()
 		self.OnCommand = self.event.Registrar
 		instance = self
@@ -136,56 +127,62 @@ end
 --- Deactivates the default camera action.
 function ControlModule:UnsetCamera()
 	if self.cameraListener ~= nil then
-		self.OnCommand:Disonnect(self.cameraListener)
+		self.OnCommand:Disconnect(self.cameraListener)
 		self.cameraListener = nil
 	end
 end
 
---- Tells if the controls are currently bound to the render step.
+--- Tells if any ControlScheme is currently bound.
 --
--- @return true if the controls are bound, false otherwise
+-- @return true if a ControlScheme is bound, false otherwise
 function ControlModule:Bound()
-	return self.controlsBound
+	return #self.bindings ~= 0
 end
 
---- Binds the controls and starts the control step.
-function ControlModule:BindControls()
-	if not self.controlsBound then
-		local schemeName = self.ControlScheme.Name
-		for command, control in pairs(self.ControlScheme.ControlSet) do
-			if self.monitors[command] == nil then
-				local monitor = SpawnMonitor(control)
-				monitor.SchemeName = schemeName
-				monitor:BindControl()
-				self.monitors[command] = monitor
-			end
-		end
-		
-		-- The control step that is added to the render step.
-		local function onControlStep()
-			for command, monitor in pairs(self.monitors) do
-				if monitor:Updated() then
-					self.event:Fire(command, monitor:GetValue())
-				end
-			end
-		end
-		
-		RunService:BindToRenderStep(RenderStepName, Enum.RenderPriority.Input.Value, onControlStep)
-		self.controlsBound = true
+--- Provides the active ControlScheme.
+--
+-- @return the active ControlScheme if one exists, nil otherwise
+function ControlModule:BoundTo()
+	return self.bindings[#self.bindings]
+end
+
+--- Binds the ControlScheme to be monitored.
+-- The ControlScheme will be added to the top of the binding stack, overriding
+-- previously bound ControlSchemes.
+--
+-- @param scheme the ControlScheme to bind
+function ControlModule:Bind(scheme)
+	table.insert(self.bindings, scheme)
+end
+
+--- Unbinds the most recently bound ControlScheme.
+-- The previous most recently bound ControlScheme will become active.
+function ControlModule:Unbind()
+	if self:Bound() then
+		table.remove(self.bindings)
 	end
 end
 
---- Unbinds the controls and stops the control step.
-function ControlModule:UnbindControls()
-	if self.controlsBound then
-		RunService:UnbindFromRenderStep(RenderStepName)
-		
-		for _, monitor in pairs(self.monitors) do
-			monitor:UnbindControl()
+--- Unbinds all ControlSchemes.
+function ControlModule:UnbindAll()
+	self.bindings = {}
+end
+
+--- Updates the ControlModule and active ControlScheme.
+function ControlModule:Update()
+	if self:Bound() then
+		local controlScheme = self:BoundTo()
+		for name, control in controlScheme:Controls() do
+			local monitor = control:GetMonitor()
+			if monitor ~= nil then
+				monitor:Update()
+				if monitor:Updated() then
+					self.event:Fire(name, monitor:Value())
+				end
+			else
+				Console.warn("Control " .. name .. " in active ControlScheme has no Monitor.")
+			end
 		end
-		
-		self.monitors = {}
-		self.controlsBound = false
 	end
 end
 

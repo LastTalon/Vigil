@@ -81,15 +81,6 @@ function BinaryMonitor:defaultValue()
 	return false
 end
 
---- Performs no processing.
-function BinaryMonitor:processEntry()
-end
-
---- Does no cleaning.
--- BinaryMonitor keeps no special state, so no special cleaning is needed.
-function BinaryMonitor:clean()
-end
-
 -- End --
 Console.log("Done.")
 

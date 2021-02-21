@@ -47,8 +47,7 @@ Monitor.__index = Monitor
 -- @return the new Monitor
 function Monitor.new()
 	local self = setmetatable({}, Monitor)
-	self.bound = false
-	self.inputs = {}
+	self.updated = false
 	return self
 end
 
@@ -56,7 +55,7 @@ end
 --
 -- @return true if bound, false otherwise
 function Monitor:Bound()
-	return self.bound
+	return self.control ~= nil
 end
 
 --- Gets this Monitor's value.
@@ -64,6 +63,14 @@ end
 -- @return the value
 function Monitor:GetValue()
 	return self.value
+end
+
+--- Tells if this Monitor's value has changed.
+-- This will be true if the value of the input changed during the last update.
+--
+-- @return true if updated, false otherwise
+function Monitor:Updated()
+	return self.updated
 end
 
 --- Updates the value of this Monitor.
@@ -77,63 +84,77 @@ end
 -- @see Input
 -- @see ControlModule
 function Monitor:Update()
-	local value = self:nullValue()
+	local value = self:defaultValue()
 	local scale = 0
-	for _, input in ipairs(self.inputs) do
-		local inputValue
-		local inputScale
-		local valid = true
-		
-		-- Get specific input
-		if input.Type == InputType.None then
-			inputValue = false
-		elseif input.Type == InputType.Keyboard then
-			inputValue = UserInputService:IsKeyDown(input.Code)
-		elseif input.Type == InputType.MouseButton then
-			inputValue = UserInputService:IsMouseButtonPressed(input.Code)
-		elseif input.Type == InputType.MouseMovement then
-			if input.Code == DirectionMethod.None then
+
+	if self:Bound() then
+		for _, input in self.control:Inputs() do
+			local inputValue
+			local valid = true
+
+			-- Get specific input
+			if input.Type == InputType.None then
 				inputValue = false
-			elseif input.Code == DirectionMethod.Absolute then
-				inputValue = UserInputService:GetMouseLocation()
-			elseif input.Code == DirectionMethod.Relative then
-				inputValue = UserInputService:GetMouseDelta()
+			elseif input.Type == InputType.Keyboard then
+				inputValue = UserInputService:IsKeyDown(input.Code)
+			elseif input.Type == InputType.MouseButton then
+				inputValue = UserInputService:IsMouseButtonPressed(input.Code)
+			elseif input.Type == InputType.MouseMovement then
+				if input.Code == DirectionMethod.None then
+					inputValue = Vector3.new(0, 0, 0)
+				elseif input.Code == DirectionMethod.Absolute then
+					inputValue = UserInputService:GetMouseLocation()
+				elseif input.Code == DirectionMethod.Relative then
+					inputValue = UserInputService:GetMouseDelta()
+				else
+					Console.error("Input has invalid direction method.")
+					valid = false
+				end
+			elseif input.Type == InputType.GamepadButton then
+				inputValue = UserInputService:IsGamepadButtonDown(input.Device, input.Code)
+			elseif input.Type == InputType.GamepadDirection then
+				if input.Code == DirectionMethod.None then
+					inputValue = Vector3.new(0, 0, 0)
+				elseif input.Code == DirectionMethod.Absolute then
+					local deviceInput = getDeviceInput(input.Code, input.Device)
+					if deviceInput == nil then
+						inputValue = Vector3.new(0, 0, 0)
+					else
+						inputValue = deviceInput.Position
+					end
+				elseif input.Code == DirectionMethod.Relative then
+					local deviceInput = getDeviceInput(input.Code, input.Device)
+					if deviceInput == nil then
+						inputValue = Vector3.new(0, 0, 0)
+					else
+						inputValue = deviceInput.Delta
+					end
+				else
+					Console.error("Input has invalid direction method.")
+					valid = false
+				end
+			elseif input.Type == InputType.Scheme then
+				inputValue = input.Code
 			else
-				Console.error("Input has invalid direction method.")
+				Console.error("Input has invalid type.")
 				valid = false
 			end
-		elseif input.Type == InputType.GamepadButton then
-			inputValue = UserInputService:IsGamepadButtonDown(input.Code, input.Device)
-		elseif input.Type == InputType.GamepadDirection then
-			if input.Code == DirectionMethod.None then
-				inputValue = false
-			elseif input.Code == DirectionMethod.Absolute then
-				inputValue = getDeviceInput(input.Code, input.Device).Position
-			elseif input.Code == DirectionMethod.Relative then
-				inputValue = getDeviceInput(input.Code, input.Device).Delta
-			else
-				Console.error("Input has invalid direction method.")
-				valid = false
+
+			if valid then
+				local inputScale
+				inputValue, inputScale = self:transformValue(input, inputValue)
+				value = self:addValue(value, inputValue)
+				scale = scale + inputScale
 			end
-		elseif input.Type == InputType.Scheme then
-			inputValue = input.Code
-		else
-			Console.error("Input has invalid type.")
-			valid = false
-		end
-		
-		if valid then
-			inputValue, inputScale = self:transformValue(input, inputValue)
-			value = self:addValue(value, inputValue)
-			scale = scale + inputScale
 		end
 	end
-	
-	self.value = self:scaleValue(value, scale)
-	return self:GetValue()
+
+	value = self:scaleValue(value, scale)
+	self.updated = self.value ~= value
+	self.value = value
 end
 
---- Binds a Control to this Monitor. 
+--- Binds a Control to this Monitor.
 -- Only one Control can be bound at a time. At the time of binding all Inputs
 -- of the Control are processed and added to the Monitor. Any changes to the
 -- Control after its bound will not be reflected in the Monitor's operation.
@@ -141,27 +162,14 @@ end
 -- @param control the Control to bind
 function Monitor:Bind(control)
 	if not self:Bound() then
-		for _, input in ipairs(control.inputs) do
-			local entry = {}
-			entry.Type = input.Type
-			entry.Code = input.Code
-			entry.Offset = input.Offset
-			entry.Devices = input.Devices
-			self:processEntry(entry)
-			table.insert(self.inputs, entry)
-		end
-		self.bound = true
+		self.control = control
 	end
 end
 
 --- Unbinds this Monitor from any Control it may be bound to.
 -- Automatically resets this Monitor.
 function Monitor:Unbind()
-	if self:Bound() then
-		self.inputs = {}
-		self:clean()
-		self.bound = false
-	end
+	self.control = nil
 end
 
 --- Transforms an Input's value for this Monitor based on its InputType.
@@ -214,23 +222,6 @@ end
 -- @return the default value
 function Monitor:defaultValue()
 	Console.warn("defaultValue must be overridden and should not be called from Monitor.")
-end
-
---- Performs any necessary post-processing of an entry for this Monitor.
--- Occurs when new entries are added to this Monitor during the binding step.
--- The monitor may modify or add any values to the entry. An entry has fields
--- Type, Code, Offset, and, Devices, from its associated Input.
---
--- @param entry the entry to process
-function Monitor:processEntry()
-	Console.warn("processEntry must be overridden and should not be called from Monitor.")
-end
-
---- Cleans up any additional data or state created by this Monitor.
--- Occurs during this Monitor's unbind step. Leaves this Monitor in a state
--- ready to be bound again.
-function Monitor:clean()
-	Console.warn("clean must be overridden and should not be called from Monitor.")
 end
 
 -- End --

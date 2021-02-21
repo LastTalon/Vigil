@@ -13,18 +13,7 @@ local Console = require(game:GetService("ReplicatedStorage"):WaitForChild("Scrip
 Console.log("Loading dependencies...")
 
 local Monitor = require(script.Parent)
-local AxisMonitor = require(script.Parent:WaitForChild("AxisMonitor"))
 local InputType = require(script.Parent.Parent:WaitForChild("InputType"))
-local Direction = require(script.Parent.Parent:WaitForChild("VectorDirection"))
-
--- Constants --
-Console.log("Initializing constants...")
-
--- Direction vectors
-local directional_value = {
-	[Direction.Vertical] = Vector2.new(0, 1),
-	[Direction.Horizontal] = Vector2.new(1, 0)
-}
 
 -- Variables --
 Console.log("Initializing variables...")
@@ -56,23 +45,33 @@ end
 -- @return the transformed value. A Vector2.
 -- @return the scaling factor. Always 1, all scaling is even.
 function VectorMonitor:transformValue(input, value)
-	local type = input.Type
+	local inputType = input.Type
 	local offset = (input.Offset or Vector2.new(0, 0))
-	if type == InputType.None or type == InputType.Keyboard or type == InputType.MouseButton or type == InputType.GamepadButton then
+	if inputType == InputType.None or inputType == InputType.Keyboard or inputType == InputType.MouseButton or inputType == InputType.GamepadButton then
 		return ((value and Vector2.new(0, 1)) or Vector2.new(0, 0)) + offset, 1
-	elseif type == InputType.MouseMovement or type == InputType.GamepadDirection then
+	elseif inputType == InputType.MouseMovement or inputType == InputType.GamepadDirection then
 		if input.Code == Enum.KeyCode.ButtonL2 or input.Code == Enum.KeyCode.ButtonR2 then
 			return Vector2.new(0, value.Z) + offset, 1
 		else
 			return Vector2.new(value.X, value.Y) + offset, 1
 		end
-	elseif type == InputType.Scheme then
-		local schemeValue = Vector2.new(0, 0)
-		for id, enum in pairs(Direction) do
-			local monitor = input.Code[id]
-			schemeValue = schemeValue + (directional_value[enum] * monitor:Update())
+	elseif inputType == InputType.Scheme then
+		local valueType = type(value)
+		if valueType == "boolean" then
+			value = value and Vector2.new(1, 0) or Vector2.new(0, 0)
+		elseif valueType == "number" then
+			value = Vector2.new(value, 0)
+		elseif valueType == "userdata" then
+			local robloxType = typeof(valueType)
+			if robloxType == "Vector3" then
+				value = Vector2.new(value.X, value.Y)
+			elseif robloxType ~= "Vector2" then
+				Console.error("VectorMonitor encountered an unresolvable " .. robloxType .. " userdata type from scheme Input")
+			end
+		else
+			Console.error("VectorMonitor encountered an unresolvable " .. valueType .. " type from scheme Input")
 		end
-		return schemeValue + offset, 1
+		return value + offset, 1
 	end
 	return Vector2.new(0, 0), 1
 end
@@ -100,31 +99,26 @@ end
 --- Gets the default value of (0, 0) for a VectorMonitor.
 --
 -- @return the default value. Always (0, 0).
-function VectorMonitor:nullValue()
+function VectorMonitor:defaultValue()
 	return Vector2.new(0, 0)
 end
 
 --- Creates a Monitor for any entries with axis schemes.
 --
 -- @param entry the entry to process
-function VectorMonitor:processEntry(entry)
-	if entry.Type == InputType.Scheme then
-		local scheme = entry.Code
-		entry.Code = {}
-		for id, _ in pairs(Direction) do
-			if scheme.ControlSet[id] ~= nil then
-				local monitor = AxisMonitor.new()
-				monitor:Bind(scheme.ControlSet[id])
-				entry.Code[id] = monitor
-			end
-		end
-	end
-end
-
---- Does no cleaning.
--- VectorMonitor keeps no special state, so no special cleaning is needed.
-function VectorMonitor:clean()
-end
+-- function VectorMonitor:processEntry(entry)
+-- 	if entry.Type == InputType.Scheme then
+-- 		local scheme = entry.Code
+-- 		entry.Code = {}
+-- 		for id, _ in pairs(Direction) do
+-- 			if scheme.ControlSet[id] ~= nil then
+-- 				local monitor = AxisMonitor.new()
+-- 				monitor:Bind(scheme.ControlSet[id])
+-- 				entry.Code[id] = monitor
+-- 			end
+-- 		end
+-- 	end
+-- end
 
 -- End --
 Console.log("Done.")

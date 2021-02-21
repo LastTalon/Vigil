@@ -44,14 +44,22 @@ end
 -- Adds the new Control the ControlScheme. If a Control is not specified it
 -- creates a new one. It then returns the Control added.
 --
+-- @param id the id of the Control
 -- @param control the Control to add
 -- @return the Control added
-function ControlScheme:Add(control)
-	if type(control) == "string" then
-		control = Control.new(control)
-	end
-	self.ControlSet[control.Name] = control
+function ControlScheme:Add(id, control)
+	control = control or Control.new()
+	self.ControlSet[id] = control
 	return control
+end
+
+--- Gets a Control of this ControlScheme.
+-- Gets the Control at the specified id.
+--
+-- @param id the id of the Control
+-- @return the Input
+function ControlScheme:Get(id)
+	return self.ControlSet[id]
 end
 
 --- Removes a Control.
@@ -60,6 +68,14 @@ end
 -- @param id the id of the Control to remove
 function ControlScheme:Remove(id)
 	self.ControlSet[id] = nil
+end
+
+--- The iterator for this ControlScheme
+-- Iterates over all Controls in this ControlScheme.
+--
+-- @return the iterator
+function ControlScheme:Controls()
+	return pairs(self.ControlSet)
 end
 
 -- End --

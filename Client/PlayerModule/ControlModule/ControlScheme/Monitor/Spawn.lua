@@ -15,7 +15,7 @@ local Console = require(game:GetService("ReplicatedStorage"):WaitForChild("Scrip
 -- Dependencies --
 Console.log("Loading dependencies...")
 
-local Method = require(script.Parent.Parent:WaitForChild("ControlScheme"):WaitForChild("Control"):WaitForChild("Method"))
+local Method = require(script.Parent.Parent:WaitForChild("ControlMethod"))
 local BinaryMonitor = require(script.Parent:WaitForChild("BinaryMonitor"))
 local AxisMonitor = require(script.Parent:WaitForChild("AxisMonitor"))
 local VectorMonitor = require(script.Parent:WaitForChild("VectorMonitor"))

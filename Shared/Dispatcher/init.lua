@@ -1,17 +1,18 @@
---- Dispatches events between client and server
--- Sends events between the client and the server and automatically triggers
--- any Commands that are registered. Allows creation of a network of Commands
--- for communication between client and server, forming the backbone of a
--- communication protocol.
+--- Dispatches Commands over Connections
+-- Sends and receives any Commands between each other and over any bound
+-- Connection as well as any listeners. Allows creation of a network of
+-- Commands for communication between client and server, forming the backbone
+-- of a protocol.
 --
 -- @author LastTalon
--- @version 0.1.1, 2020-10-01
+-- @version 0.2.0, 2020-10-19
 -- @since 0.1
 --
 -- @module Dispatcher
 -- @field OnCommand the Event registrar
 --
 -- @see Command
+-- @see Connection
 -- @see Event
 
 local Console = require(game:GetService("ReplicatedStorage"):WaitForChild("Scripts"):WaitForChild("Console")).sourced("Dispatcher")
@@ -19,7 +20,6 @@ local Console = require(game:GetService("ReplicatedStorage"):WaitForChild("Scrip
 -- Dependencies --
 Console.log("Loading dependencies...")
 
-local RunService = game:GetService("RunService")
 local Event = require(game:GetService("ReplicatedStorage"):WaitForChild("Scripts"):WaitForChild("Event"))
 
 -- Variables --
@@ -33,130 +33,116 @@ Console.log("Constructing objects...")
 Dispatcher.__index = Dispatcher
 
 --- The Dispatcher constructor.
--- Creates a new Dispatcher attached to the provided RemoteEvent. Optionally
--- binds the dispatcher.
+-- Creates a new Dispatcher, optionally binding it.
 --
--- @param event the RemoteEvent this Dispatcher binds to
--- @param bind binds this Dispatcher if true
+-- @param connection binds this Dispatcher if provided
 -- @return the new Dispatcher
-function Dispatcher.new(event, bind)
+function Dispatcher.new(connection)
 	local self = setmetatable({}, Dispatcher)
-	bind = bind or false
-	self.remoteEvent = event
-	self.localEvent = Event.New()
+	self.event = Event.new()
 	self.commands = {}
-	self.currentTick = 0
-	self.OnCommand = self.localEvent.Registrar
-	for _, commandModule in ipairs(script:WaitForChild("Command"):GetChildren()) do
-		self:Add(require(commandModule))
-	end
-	if bind then
-		self:Bind()
-	end
+	self.unprocessed = {}
+	self.tick = 0
+	self.OnCommand = self.event.Registrar
+	self:Bind(connection)
 	return self
 end
 
+--- Receives command activations to be processed.
+--
+-- @param command the name of the Command to process
+-- @param arguments the arguments passed with the Command
+function Dispatcher:receive(command, arguments)
+	local activation = {}
+	activation.name = command
+	activation.arguments = arguments
+	table.insert(self.unprocessed, activation)
+end
+
 --- Updates the Dispatcher.
--- Updates the Dispatcher wtih a new tick as well as all attached Commands and
--- any listening functions. This is automatically called by the RunService.
--- This should not normally be called directly.
+-- Progresses the Dispatcher's tick, updates all commands registered with this
+-- Dispatcher and processes all commands for any listeners.
 --
--- @param time time passed by RunService
+-- This should not normally be called directly, and should, instead, be called
+-- by a Controller.
 --
--- @see RunService
-function Dispatcher:update(time)
-	local tick = math.floor(time * 30)
-	if tick > self.currentTick then
-		self.currentTick = tick
-		for _, command in pairs(self.commands) do
-			local activations = command:Update(tick)
-			for _, arguments in ipairs(activations) do
-				if self.remoteEvent ~= nil then
-					if RunService:IsClient() then
-						self.remoteEvent:FireServer(command.Name, tick, arguments)
-					elseif RunService:IsServer() then
-						self.remoteEvent:FireAllClients(command.Name, tick, arguments)
-					end
-				end
-				self.localEvent:Fire(command.Name, tick, 0, nil, true, arguments)
+-- @see Controller
+function Dispatcher:Update()
+	self.tick = self.tick + 1
+	for _, command in pairs(self.commands) do
+		for _, arguments in ipairs(command:Update(self.tick)) do
+			if self.connection then
+				self.connection:Report(command.Name, arguments)
 			end
+			self.event:Fire(command.Name, arguments, true)
 		end
-		for _, command in ipairs(self.commandQueue) do
-			self.localEvent:Fire(command.name, tick, tick - command.tick, command.player, false, command.arguments)
-		end
-		self.commandQueue = {}
 	end
+	for _, activation in ipairs(self.unprocessed) do
+		self.event:Fire(activation.name, activation.arguments, false)
+	end
+	self.unprocessed = {}
 end
 
---- Updates the Command queue.
--- Updates the Command queue with any additional commands sent by the
--- RemoteEvent. The Commands are not processed until the next tick. This is
--- automatically called by the RemoteEvent. This should not normally be called
--- directly.
+function Dispatcher:Tick()
+	return self.tick
+end
+
+--- Binds the Dispatcher to a Connection.
 --
--- @param ... all parameters passed by the RemoteEvent
-function Dispatcher:updateRemoteEvent(...)
-	local args = {...}
-	local command = {}
-	if RunService:IsClient() then
-		command.name = args[1]
-		command.tick = args[2]
-		command.arguments = args[3]
-	elseif RunService:IsServer() then
-		command.player = args[1]
-		command.name = args[2]
-		command.tick = args[3]
-		command.arguments = args[4]
+-- @param connection the Connection to bind to
+-- @return true if the Connection was bound, false otherwise
+function Dispatcher:Bind(connection)
+	if not self.connection and connection ~= nil then
+		self.connection = connection
+		self.connectionEvent = connection.Receive:Connect(function(...) self:receive(...) end)
+		return true
 	end
-	table.insert(self.commandQueue, command)
-end
-
---- Binds the Dispatcher.
--- Connects the RemoteEvent and RunService to updateRemoteEvent and update
--- respectively.
-function Dispatcher:Bind()
-	if self.remoteConnection == nil and self.remoteEvent ~= nil then
-		self.commandQueue = {}
-		if RunService:IsClient() then
-			self.remoteConnection = self.remoteEvent.OnClientEvent:Connect(function(...) self:updateRemoteEvent(...) end)
-		elseif RunService:IsServer() then
-			self.remoteConnection = self.remoteEvent.OnServerEvent:Connect(function(...) self:updateRemoteEvent(...) end)
-		end
-	end
-	if self.binding == nil then
-		self.binding = RunService.Stepped:Connect(function(...) self:update(...) end)
-	end
+	return false
 end
 
 --- Unbinds the Dispatcher.
--- Disconnects the RemoteEvent and RunService listeners.
 function Dispatcher:Unbind()
-	if self.remoteConnection == nil then
-		self.commandQueue = nil
-		self.remoteConnection:Disconnect()
-		self.remoteConnection = nil
-	end
-	if self.binding ~= nil then
-		self.binding:Disconnect()
-		self.binding = nil
+	if self.connection then
+		self.connection.Receive:Disconnect(self.connectionEvent)
+		self.connection = nil
 	end
 end
 
---- Adds a Command to this Dispatcher.
--- Automatically registers the Command's listener and fires the Command during
--- the tick update.
+--- Tells if the Dispatcher are currently bound to a Connection.
 --
--- @param command the Command to add
-function Dispatcher:Add(command)
-	self.commands[command.name] = command
-	self.OnCommand:Connect(function(...) command:Listener(...) end)
+-- @return true if the Dispatcher is bound, false otherwise
+function Dispatcher:Bound()
+	return self.connection ~= nil
 end
 
---- Removes a Command from this Dispatcher.
+--- Registers a Command with this Dispatcher.
+-- Automatically registers the Command's listener and updates the Command when
+-- the Dispatcher updates.
 --
--- @param command the Command to remove
-function Dispatcher:Remove(command)
-	self.commands[command.name] = nil
+-- @param command the Command to register
+function Dispatcher:Register(command)
+	if not self.commands[command.Name] then
+		self.commands[command.Name] = command
+		self.OnCommand:Connect(function(...) command:Listener(...) end)
+		return true
+	end
+	return false
+end
+
+--- Deregisters a Command from this Dispatcher.
+--
+-- @param command the Command or name of the Command to deregister
+function Dispatcher:Deregister(command)
+	if type(command) == "string" then
+		if self.commands[command] then
+			self.commands[command] = nil
+			return true
+		end
+	elseif self.commands[command.Name] then
+		self.commands[command.Name] = nil
+		return true
+	end
+	return false
 end
 
 -- End --

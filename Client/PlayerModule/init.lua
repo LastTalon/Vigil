@@ -17,6 +17,7 @@ Console.log("Loading dependencies...")
 
 local Cameras = require(script:WaitForChild("CameraModule"))
 local Controls = require(script:WaitForChild("ControlModule"))
+local Direction = require(script:WaitForChild("DirectionModule"))
 
 -- Variables --
 Console.log("Initializing variables...")
@@ -39,6 +40,7 @@ function PlayerModule.new()
 		local self = setmetatable({}, PlayerModule)
 		self.Cameras = Cameras
 		self.Controls = Controls
+		self.Direction = Direction
 		instance = self
 	end
 	return instance

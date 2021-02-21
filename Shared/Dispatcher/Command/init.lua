@@ -30,7 +30,6 @@ Command.__index = Command
 -- @return the new Command
 function Command.new()
 	local self = setmetatable({}, Command)
-	self.Name = ""
 	return self
 end
 

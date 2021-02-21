@@ -1,32 +1,32 @@
---- The camera module.
+--- The direction module.
 --
 -- @author LastTalon
 -- @version 0.1.0, 2020-11-05
 -- @since 0.1
 --
--- @module CameraModule
+-- @module DirectionModule
 
-local Console = require(game:GetService("ReplicatedStorage"):WaitForChild("Scripts"):WaitForChild("Console")).sourced("Camera Module")
+local Console = require(game:GetService("ReplicatedStorage"):WaitForChild("Scripts"):WaitForChild("Console")).sourced("Direction Module")
 
 -- Variables --
 Console.log("Initializing variables...")
 
-local CameraModule = {}
+local DirectionModule = {}
 local instance
 
 -- Local Objects --
 Console.log("Constructing objects...")
 
-CameraModule.__index = CameraModule
+DirectionModule.__index = DirectionModule
 
 --- The contructor for the singleton.
 -- Creates a new singleton if none exists. Always returns the same object
 -- initially created.
 --
 -- @return the singleton
-function CameraModule.new()
+function DirectionModule.new()
 	if instance == nil then
-		local self = setmetatable({}, CameraModule)
+		local self = setmetatable({}, DirectionModule)
 		instance = self
 	end
 	return instance
@@ -35,4 +35,4 @@ end
 -- End --
 Console.log("Done.")
 
-return CameraModule.new()
+return DirectionModule.new()

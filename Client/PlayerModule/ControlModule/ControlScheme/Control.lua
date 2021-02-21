@@ -5,7 +5,7 @@
 -- given.
 --
 -- @author LastTalon
--- @version 0.1.0, 2020-04-16
+-- @version 0.1.1, 2020-11-06
 -- @since 0.1
 --
 -- @module Control
@@ -22,7 +22,7 @@ local Console = require(game:GetService("ReplicatedStorage"):WaitForChild("Scrip
 -- Dependencies --
 Console.log("Loading dependencies...")
 
-local Input = require(script:WaitForChild("Input"))
+local Input = require(script.Parent:WaitForChild("Input"))
 
 -- Variables --
 Console.log("Initializing variables...")
@@ -43,7 +43,7 @@ Control.__index = Control
 -- @return the new Control
 function Control.new(name, description, method)
 	local self = setmetatable({}, Control)
-	self.Inputs = {}
+	self.InputSet = {}
 	self.Name = name
 	self.Description = description
 	self.Method = method
@@ -54,21 +54,58 @@ end
 -- Adds the specified Input. If none is specified it creates a new Input. It
 -- then returns the Input that was added.
 --
+-- @param id the id of the Input
 -- @param input the Input to add
 -- @return the Input added
-function Control:Add(input)
+function Control:Add(id, input)
 	input = input or Input.new()
-	table.insert(self.Inputs, input)
+	self.InputSet[id] = input
 	return input
 end
 
---- Removes an Input from this control.
--- Removes the Input at the specified index. If no index is specified the last
--- Input is removed.
+--- Gets and Input of this control.
+-- Gets the Input at the specified id.
 --
--- @param index the index of the Input to remove
-function Control:Remove(index)
-	table.remove(self.Inputs, index)
+-- @param id the id of hte Input
+-- @return the Input
+function Control:Get(id)
+	return self.InputSet[id]
+end
+
+--- Removes an Input from this control.
+-- Removes the Input with the specified id.
+--
+-- @param id the id of the Input to remove
+function Control:Remove(id)
+	self.InputSet[id] = nil
+end
+
+--- The iterator for this Control
+-- Iterates over all Inputs in this Control.
+--
+-- @return the iterator
+function Control:Inputs()
+	return pairs(self.InputSet)
+end
+
+--- Sets this Control's Monitor and binds it.
+--
+-- @param monitor the Monitor
+function Control:SetMonitor(monitor)
+	if self.monitor ~= nil then
+		self.monitor:Unbind()
+	end
+	self.monitor = monitor
+	if monitor ~= nil then
+		monitor:Bind(self)
+	end
+end
+
+--- Gets this Control's Monitor.
+--
+-- @return the Monitor
+function Control:GetMonitor()
+	return self.monitor
 end
 
 -- End --
